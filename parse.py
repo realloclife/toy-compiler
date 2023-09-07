@@ -99,22 +99,27 @@ class Parser:
         match self.curr.type:
             case lex.TokenType.IDENTIFIER | lex.TokenType.STRING | lex.TokenType.BOOL | lex.TokenType.NUMBER:
                 return Leaf(self.curr)
-        return cast(Expression, None) # TODO
+            case illegal:
+                raise UnexpectedTokenError(Expression, illegal)
 
     def parse_statement(self) -> Optional[Statement]:
         if not self.advance():
             return None
+        statement = None
         match self.curr.type:
             case lex.TokenType.KEYWORD_RETURN:
                 self.consume()
-                return Return(self.parse_expression())
+                statement = Return(self.parse_expression())
+                self.expect(lex.TokenType.SEMICOLON)
             case lex.TokenType.KEYWORD_LET:
-                identifier = cast(str, self.consume().literal)
+                identifier = cast(str, self.expect(lex.TokenType.IDENTIFIER).literal)
                 self.expect(lex.TokenType.ASSIGN)
                 self.consume()
-                return Let(identifier, self.parse_expression())
+                statement = Let(identifier, self.parse_expression())
+                self.expect(lex.TokenType.SEMICOLON)
             case illegal:
                 raise UnexpectedTokenError(Statement, illegal)
+        return statement
     
     def get_tree(self) -> List[Statement]:
         statements = []

@@ -25,11 +25,13 @@ def main():
             tokens = lex.Lexer(source).get_tokens()
         except lex.IllegalLexemeError as e:
             print(f'Invalid lexeme \'{e.args[0]}\'')
+            continue
         syntax_tree = cast(List[parse.Statement], None)
         try:
             syntax_tree = parse.Parser(tokens).get_tree()
         except parse.UnexpectedTokenError as e:
             print(f'Expected {e.args[0]}, got {e.args[1]} instead')
+            continue
         for statement in syntax_tree:
             print(statement)
 
