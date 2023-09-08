@@ -1,8 +1,7 @@
-from typing import Optional, List, Dict, Callable, cast
+from typing import Optional, List, Dict, Callable, Union, cast
 from enum import Enum, auto
 
 import lex
-
 
 class UnexpectedTokenError(Exception):
     pass
@@ -43,6 +42,7 @@ class Leaf(Expression):
         NUMBER = auto()
 
     def __init__(self, token: lex.Token):
+        self.value = cast(Union[str, bool, float], None)
         token.literal = cast(str, token.literal) # safe
         match token.type:
             case lex.TokenType.STRING:
@@ -74,8 +74,8 @@ class Unary(Expression):
 
 class Binary(Expression):
     class Operation(Enum):
-        PLUS = auto()
-        MINUS = auto()
+        ADD = auto()
+        SUBTRACT = auto()
         MULTIPLY = auto()
         DIVIDE = auto()
         MODULO = auto()
@@ -222,9 +222,9 @@ class Parser:
         operation = None
         match self.curr.type:
             case lex.TokenType.PLUS:
-                operation = Binary.Operation.PLUS
+                operation = Binary.Operation.ADD
             case lex.TokenType.DASH:
-                operation = Binary.Operation.MINUS
+                operation = Binary.Operation.SUBTRACT
             case lex.TokenType.ASTERISK:
                 operation = Binary.Operation.MULTIPLY
             case lex.TokenType.SLASH:
@@ -287,7 +287,7 @@ class Parser:
                 self.expect(lex.TokenType.SEMICOLON)
         return statement
     
-    def get_tree(self) -> List[Statement]:
+    def build_tree(self) -> List[Statement]:
         statements = []
         while (statement := self.parse_statement()) is not None:
             statements.append(statement)

@@ -3,6 +3,7 @@ import sys
 
 import lex
 import parse
+import codegen
 
 def main():
     # if len(sys.argv) == 2:
@@ -22,18 +23,18 @@ def main():
             raise SystemExit
         tokens = cast(List[lex.Token], None)
         try:
-            tokens = lex.Lexer(source).get_tokens()
+            tokens = lex.Lexer(source).build_tokens()
         except lex.IllegalLexemeError as e:
             print(f'Invalid lexeme \'{e.args[0]}\'')
             continue
         syntax_tree = cast(List[parse.Statement], None)
         try:
-            syntax_tree = parse.Parser(tokens).get_tree()
+            syntax_tree = parse.Parser(tokens).build_tree()
         except parse.UnexpectedTokenError as e:
             print(f'Expected {e.args[0]}, got {e.args[1]} instead')
             continue
-        for statement in syntax_tree:
-            print(statement)
+        code = codegen.Generator(syntax_tree).build_asm()
+        print(code)
 
 if __name__ == '__main__':
     main()

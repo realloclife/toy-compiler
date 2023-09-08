@@ -169,7 +169,7 @@ class Lexer:
                 raise IllegalLexemeError(illegal)
 
     
-    def get_tokens(self) -> List[Token]:
+    def build_tokens(self) -> List[Token]:
         tokens = []
         while (token := self.next_token()) is not None:
             tokens.append(token)
