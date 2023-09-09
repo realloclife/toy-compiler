@@ -3,7 +3,6 @@ import sys
 
 import lex
 import parse
-import codegen
 
 def main():
     # if len(sys.argv) == 2:
@@ -33,8 +32,8 @@ def main():
         except parse.UnexpectedTokenError as e:
             print(f'Expected {e.args[0]}, got {e.args[1]} instead')
             continue
-        code = codegen.Generator(syntax_tree).build_asm()
-        print(code)
+        for statement in syntax_tree:
+            print(statement)
 
 if __name__ == '__main__':
     main()

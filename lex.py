@@ -25,14 +25,17 @@ class TokenType(Enum):
     GREATER = auto()
     LESS_EQUAL = auto()
     GREATER_EQUAL = auto()
+    AND = auto()
+    OR = auto()
     KEYWORD_FN = auto()
     KEYWORD_LET = auto()
     KEYWORD_IF = auto()
+    KEYWORD_ELSEIF = auto()
     KEYWORD_ELSE = auto()
     KEYWORD_RETURN = auto()
 
 class Token:
-    def __init__(self, type: TokenType, literal: Optional[str] = None):
+    def __init__(self, type: TokenType, literal: Optional[str]=None):
         self.type = type
         self.literal = literal
 
@@ -59,7 +62,7 @@ class Lexer:
         else:
             return False
     
-    def peek(self, count: int = 1) -> Optional[str]:
+    def peek(self, count: int=1) -> Optional[str]:
         if self.index + count < len(self.input) and self.index + count >= 0:
             return self.input[self.index + count]
         else:
@@ -146,6 +149,12 @@ class Lexer:
                 return Token(TokenType.GREATER_EQUAL)
             case '>':
                 return Token(TokenType.GREATER)
+            case '&' if self.peek() == '&':
+                self.advance()
+                return Token(TokenType.AND)
+            case '|' if self.peek() == '|':
+                self.advance()
+                return Token(TokenType.OR)
             case ident if ident.isalpha():
                 ident = self.read_identifier()
                 match ident:
@@ -153,6 +162,8 @@ class Lexer:
                         return Token(TokenType.BOOL, ident)
                     case 'if':
                         return Token(TokenType.KEYWORD_IF)
+                    case 'elseif':
+                        return Token(TokenType.KEYWORD_ELSEIF)
                     case 'else':
                         return Token(TokenType.KEYWORD_ELSE)
                     case 'return':

@@ -1,4 +1,6 @@
-from typing import Optional, List, Dict, Callable, Union, cast
+# TODO remove __repr__ after the parser is complete
+
+from typing import Optional, List, Dict, Callable, Union, Tuple, cast
 from enum import Enum, auto
 
 import lex
@@ -24,6 +26,7 @@ class Precedence(Enum):
     LESSGREATER = auto()
     SUM = auto()
     PRODUCT = auto()
+    LOGICAL = auto()
     PREFIX = auto()
     CALL = auto()
 
@@ -85,6 +88,8 @@ class Binary(Expression):
         GREATER_EQUAL = auto()
         EQUAL = auto()
         NOT_EQUAL = auto()
+        AND = auto()
+        OR = auto()
     
     def __init__(self, left: Expression, operation: Operation, right: Expression):
         self.left = left
@@ -93,6 +98,31 @@ class Binary(Expression):
 
     def __repr__(self) -> str:
         return f'Binary(EXPR)[Left: {self.left}, Operation: {self.operation}, Right: {self.right}]'
+
+class Block(Expression):
+    def __init__(self, body: List[Statement]):
+        self.body = body
+    
+    def __repr__(self) -> str:
+        return f'Block(EXPR)[Body: ({", ".join(str(stmt) for stmt in self.body)})]'
+
+class If(Statement):
+    def __init__(self, main: Tuple[Expression, Block], alternatives: Dict[Expression, Block]={}, fallback: Optional[Block]=None):
+        self.main = main
+        self.alternatives = alternatives
+        self.fallback = fallback
+    
+    def __repr__(self) -> str:
+        if len(self.alternatives) > 0:
+            if self.fallback is not None:
+                return f'If(STMT)[Main: {self.main}, Alternatives: {self.alternatives}, Fallback: {self.fallback}]'
+            else:
+                return f'If(STMT)[Main: {self.main}, Alternatives: {self.alternatives}]'
+        else:
+            if self.fallback is not None:
+                return f'If(STMT)[Main: {self.main}, Fallback: {self.fallback}]'
+            else:
+                return f'If(STMT)[Main: {self.main}]'
 
 class Wrapper(Statement):
     def __init__(self, value: Expression):
@@ -110,7 +140,7 @@ class Let(Statement):
         return f'Let(STMT)[Identifier: {self.identifier}, Value: {self.value}]'
 
 class Return(Statement):
-    def __init__(self, value: Optional[Expression] = None):
+    def __init__(self, value: Optional[Expression]=None):
         self.value = value
 
     def __repr__(self) -> str:
@@ -131,6 +161,8 @@ class Parser:
             lex.TokenType.NUMBER: self.parse_leaf,
             lex.TokenType.BANG: self.parse_unary,
             lex.TokenType.DASH: self.parse_unary,
+            lex.TokenType.LEFT_PARENTHESIS: self.parse_grouped,
+            lex.TokenType.LEFT_CURLY: self.parse_block,
         }
         self.infix_parsers: Dict[lex.TokenType, InfixParser] = {
             lex.TokenType.PLUS: self.parse_binary,
@@ -144,6 +176,8 @@ class Parser:
             lex.TokenType.GREATER_EQUAL: self.parse_binary,
             lex.TokenType.EQUAL: self.parse_binary,
             lex.TokenType.BANG_EQUAL: self.parse_binary,
+            lex.TokenType.AND: self.parse_binary,
+            lex.TokenType.OR: self.parse_binary,
         }
         self.infix_precedences = {
             lex.TokenType.EQUAL: Precedence.EQUALS,
@@ -157,6 +191,8 @@ class Parser:
             lex.TokenType.SLASH: Precedence.PRODUCT,
             lex.TokenType.ASTERISK: Precedence.PRODUCT,
             lex.TokenType.MODULUS: Precedence.PRODUCT,
+            lex.TokenType.AND: Precedence.LOGICAL,
+            lex.TokenType.OR: Precedence.LOGICAL,
         }
 
     def advance(self) -> bool:
@@ -172,7 +208,7 @@ class Parser:
             raise UnexpectedTokenError(lex.Token, None)
         return self.curr
 
-    def peek(self, count: int = 1) -> Optional[lex.Token]:
+    def peek(self, count: int=1) -> Optional[lex.Token]:
         if self.index + count < len(self.input) and self.index + count >= 0:
             return self.input[self.index + count]
         else:
@@ -184,6 +220,11 @@ class Parser:
             return peek
         else:
             return None
+    
+    def expect_current(self, type: lex.TokenType) -> lex.Token:
+        if self.curr.type != type:
+            raise UnexpectedTokenError(type, self.curr)
+        return self.curr
     
     def expect(self, type: lex.TokenType) -> lex.Token:
         if not self.advance() or self.curr.type != type:
@@ -199,6 +240,21 @@ class Parser:
         if (peek := self.peek()) is not None and (prec := self.infix_precedences.get(peek.type)) is not None:
             return prec
         return Precedence.LOWEST
+    
+    def parse_expression(self, precedence: Precedence=Precedence.LOWEST) -> Expression:
+        prefix = self.prefix_parsers.get(self.curr.type)
+        if prefix is None:
+            raise UnexpectedTokenError(Expression, self.curr)
+        left = prefix()
+        while True:
+            if (peek := self.peek()) is None or peek.type == lex.TokenType.SEMICOLON or precedence.value >= self.get_peek_precedence().value:
+                break
+            infix = self.infix_parsers.get(peek.type)
+            if infix is None:
+                break
+            self.consume()
+            left = infix(left)
+        return left
     
     def parse_identifier(self) -> Identifier:
         return Identifier(cast(str, self.curr.literal))
@@ -218,7 +274,7 @@ class Parser:
         self.consume()
         return Unary(operation, self.parse_expression(Precedence.PREFIX))
     
-    def parse_binary(self, left: Expression) -> Expression:
+    def parse_binary(self, left: Expression) -> Binary:
         operation = None
         match self.curr.type:
             case lex.TokenType.PLUS:
@@ -243,52 +299,90 @@ class Parser:
                 operation = Binary.Operation.EQUAL
             case lex.TokenType.BANG_EQUAL:
                 operation = Binary.Operation.NOT_EQUAL
+            case lex.TokenType.AND:
+                operation = Binary.Operation.AND
+            case lex.TokenType.OR:
+                operation = Binary.Operation.OR
             case _:
                 raise ValueError(f'UNREACHABLE [{self.curr}] @ Parser.parse_binary')
         precedence = self.get_current_precedence()
         self.consume()
         right = self.parse_expression(precedence)
         return Binary(left, operation, right)
-
-    def parse_expression(self, precedence: Precedence = Precedence.LOWEST) -> Expression:
-        prefix = self.prefix_parsers.get(self.curr.type)
-        if prefix is None:
-            raise UnexpectedTokenError(Expression, self.curr)
-        left = prefix()
+    
+    def parse_grouped(self) -> Expression:
+        self.consume()
+        expression = self.parse_expression()
+        self.expect(lex.TokenType.RIGHT_PARENTHESIS)
+        return expression
+    
+    def parse_block(self) -> Block:
+        statements = []
         while True:
-            if (peek := self.peek()) is None or peek.type == lex.TokenType.SEMICOLON or precedence.value >= self.get_peek_precedence().value:
+            if self.consume().type == lex.TokenType.RIGHT_CURLY:
                 break
-            infix = self.infix_parsers.get(peek.type)
-            if infix is None:
-                break
-            self.consume()
-            left = infix(left)
-        return left
+            if (stmt := self.parse_statement()) is None:
+                raise UnexpectedTokenError(Statement, None)
+            statements.append(stmt)
+        return Block(statements)
 
     def parse_statement(self) -> Optional[Statement]:
-        if not self.advance():
-            return None
-        statement = None
         match self.curr.type:
-            case lex.TokenType.KEYWORD_RETURN:
-                if self.match(lex.TokenType.SEMICOLON):
-                    return Return()
-                self.consume()
-                statement = Return(self.parse_expression())
-                self.expect(lex.TokenType.SEMICOLON)
-            case lex.TokenType.KEYWORD_LET:
-                identifier = cast(str, self.expect(lex.TokenType.IDENTIFIER).literal)
-                self.expect(lex.TokenType.ASSIGN)
-                self.consume()
-                statement = Let(identifier, self.parse_expression())
-                self.expect(lex.TokenType.SEMICOLON)
-            case _:
-                statement = Wrapper(self.parse_expression())
-                self.expect(lex.TokenType.SEMICOLON)
+            case lex.TokenType.KEYWORD_IF: return self.parse_if()
+            case lex.TokenType.KEYWORD_RETURN: return self.parse_return()
+            case lex.TokenType.KEYWORD_LET: return self.parse_let()
+            case _: return self.parse_wrapper()
+    
+    def parse_if(self) -> If:
+        self.consume()
+        condition = self.parse_expression()
+        self.expect(lex.TokenType.LEFT_CURLY)
+        consequence = self.parse_block()
+        main = (condition, consequence)
+        alternatives = {}
+        fallback = None
+        self.consume()
+        while self.curr.type == lex.TokenType.KEYWORD_ELSEIF:
+            self.consume()
+            condition = self.parse_expression()
+            self.expect(lex.TokenType.LEFT_CURLY)
+            consequence = self.parse_block()
+            alternatives[condition] = consequence
+            self.consume()
+        if self.curr.type == lex.TokenType.KEYWORD_ELSE:
+            self.expect(lex.TokenType.LEFT_CURLY)
+            fallback = self.parse_block()
+            self.consume()
+        self.expect_current(lex.TokenType.SEMICOLON)
+        return If(main, alternatives, fallback)
+
+    def parse_return(self) -> Return:
+        if self.match(lex.TokenType.SEMICOLON):
+            return Return()
+        self.consume()
+        statement = Return(self.parse_expression())
+        self.expect(lex.TokenType.SEMICOLON)
+        return statement
+    
+    def parse_let(self) -> Let:
+        identifier = cast(str, self.expect(lex.TokenType.IDENTIFIER).literal)
+        self.expect(lex.TokenType.ASSIGN)
+        self.consume()
+        statement = Let(identifier, self.parse_expression())
+        self.expect(lex.TokenType.SEMICOLON)
+        return statement
+    
+    def parse_wrapper(self) -> Wrapper:
+        statement = Wrapper(self.parse_expression())
+        self.expect(lex.TokenType.SEMICOLON)
         return statement
     
     def build_tree(self) -> List[Statement]:
         statements = []
+        if not self.advance():
+            return []
         while (statement := self.parse_statement()) is not None:
             statements.append(statement)
+            if not self.advance():
+                return statements
         return statements
