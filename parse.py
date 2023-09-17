@@ -106,6 +106,14 @@ class Block(Expression):
     def __repr__(self) -> str:
         return f'Block(EXPR)[Body: ({", ".join(str(stmt) for stmt in self.body)})]'
 
+class FunctionCall(Expression):
+    def __init__(self, name: str, arguments: List[Expression]):
+        self.name = name
+        self.arguments = arguments
+
+    def __repr__(self) -> str:
+        return f'FunctionCall(STMT)[Name: {self.name}, Arguments: ({", ".join(str(arg) for arg in self.arguments)})]'
+
 class If(Statement):
     def __init__(self, main: Tuple[Expression, Block], alternatives: Dict[Expression, Block]={}, fallback: Optional[Block]=None):
         self.main = main
@@ -123,6 +131,15 @@ class If(Statement):
                 return f'If(STMT)[Main: {self.main}, Fallback: {self.fallback}]'
             else:
                 return f'If(STMT)[Main: {self.main}]'
+
+class FunctionDef(Statement):
+    def __init__(self, name: str, arguments: List[str], body: Block):
+        self.name = name
+        self.arguments = arguments
+        self.body = body
+    
+    def __repr__(self) -> str:
+        return f'FunctionDef(STMT)[Name: {self.name}, Arguments: ({", ".join(self.arguments)}), Body: {self.body}]'
 
 class Wrapper(Statement):
     def __init__(self, value: Expression):
@@ -178,6 +195,7 @@ class Parser:
             lex.TokenType.BANG_EQUAL: self.parse_binary,
             lex.TokenType.AND: self.parse_binary,
             lex.TokenType.OR: self.parse_binary,
+            lex.TokenType.LEFT_PARENTHESIS: self.parse_fn_call,
         }
         self.infix_precedences = {
             lex.TokenType.EQUAL: Precedence.EQUALS,
@@ -193,6 +211,7 @@ class Parser:
             lex.TokenType.MODULUS: Precedence.PRODUCT,
             lex.TokenType.AND: Precedence.LOGICAL,
             lex.TokenType.OR: Precedence.LOGICAL,
+            lex.TokenType.LEFT_PARENTHESIS: Precedence.CALL,
         }
 
     def advance(self) -> bool:
@@ -326,13 +345,44 @@ class Parser:
             statements.append(stmt)
         return Block(statements)
 
+    def parse_fn_call(self, left: Expression) -> FunctionCall:
+        args = []
+        self.consume()
+        while self.curr.type != lex.TokenType.RIGHT_PARENTHESIS:
+            args.append(self.parse_expression(Precedence.LOWEST))
+            if not self.match(lex.TokenType.COMMA):
+                self.expect(lex.TokenType.RIGHT_PARENTHESIS)
+                break
+            self.expect_current(lex.TokenType.COMMA)
+            self.consume()
+        self.expect_current(lex.TokenType.RIGHT_PARENTHESIS)
+        return FunctionCall(cast(Identifier, left).value, args)
+
     def parse_statement(self) -> Optional[Statement]:
         match self.curr.type:
             case lex.TokenType.KEYWORD_IF: return self.parse_if()
             case lex.TokenType.KEYWORD_RETURN: return self.parse_return()
             case lex.TokenType.KEYWORD_LET: return self.parse_let()
+            case lex.TokenType.KEYWORD_FN: return self.parse_fn_def()
             case _: return self.parse_wrapper()
     
+    def parse_fn_def(self) -> FunctionDef:
+        name = cast(str, self.expect(lex.TokenType.IDENTIFIER).literal)
+        self.expect(lex.TokenType.LEFT_PARENTHESIS)
+        args = []
+        self.consume()
+        while self.curr.type != lex.TokenType.RIGHT_PARENTHESIS:
+            args.append(cast(str, self.expect_current(lex.TokenType.IDENTIFIER).literal))
+            if not self.match(lex.TokenType.COMMA):
+                self.expect(lex.TokenType.RIGHT_PARENTHESIS)
+                break
+            self.expect_current(lex.TokenType.COMMA)
+            self.consume()
+        self.expect(lex.TokenType.LEFT_CURLY)
+        body = self.parse_block()
+        self.expect(lex.TokenType.SEMICOLON)
+        return FunctionDef(name, args, body)
+
     def parse_if(self) -> If:
         self.consume()
         condition = self.parse_expression()

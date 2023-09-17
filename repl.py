@@ -5,17 +5,6 @@ import lex
 import parse
 
 def main():
-    # if len(sys.argv) == 2:
-    #     with open(sys.argv[1]) as file:
-    #         source = file.read()
-    #         tokens = cast(List[lex.Token], [])
-    #         try:
-    #             tokens = lex.Lexer(source).get_tokens()
-    #         except lex.IllegalLexemeError as e:
-    #             print(f'Invalid lexeme \'{e.args[0]}\'')
-    #         for token in tokens:
-    #             print(token)
-    #         raise SystemExit
     while True:
         source = input('> ')
         if source == 'exit':
