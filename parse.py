@@ -107,12 +107,12 @@ class Block(Expression):
         return f'Block(EXPR)[Body: ({", ".join(str(stmt) for stmt in self.body)})]'
 
 class FunctionCall(Expression):
-    def __init__(self, name: str, arguments: List[Expression]):
-        self.name = name
+    def __init__(self, callee: Expression, arguments: List[Expression]):
+        self.callee = callee
         self.arguments = arguments
 
     def __repr__(self) -> str:
-        return f'FunctionCall(STMT)[Name: {self.name}, Arguments: ({", ".join(str(arg) for arg in self.arguments)})]'
+        return f'FunctionCall(STMT)[Callee: {self.callee}, Arguments: ({", ".join(str(arg) for arg in self.arguments)})]'
 
 class If(Statement):
     def __init__(self, main: Tuple[Expression, Block], alternatives: Dict[Expression, Block]={}, fallback: Optional[Block]=None):
@@ -356,7 +356,7 @@ class Parser:
             self.expect_current(lex.TokenType.COMMA)
             self.consume()
         self.expect_current(lex.TokenType.RIGHT_PARENTHESIS)
-        return FunctionCall(cast(Identifier, left).value, args)
+        return FunctionCall(left, args)
 
     def parse_statement(self) -> Optional[Statement]:
         match self.curr.type:
