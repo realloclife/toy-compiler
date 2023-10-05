@@ -3,6 +3,7 @@ import sys
 
 import lex
 import parse
+import codegen
 
 def main():
     while True:
@@ -21,8 +22,8 @@ def main():
         except parse.UnexpectedTokenError as e:
             print(f'Expected {e.args[0]}, got {e.args[1]} instead')
             continue
-        for statement in syntax_tree:
-            print(statement)
+        code = codegen.Codegen(syntax_tree).build_bytecode()
+        print(code)
 
 if __name__ == '__main__':
     main()
